@@ -1,0 +1,25 @@
+idf_component_register(
+    SRCS
+        "app_main.c"
+        "wifi_setup.c"
+        "aquafeeder_time.c"
+        "stepper_motor.c"
+        "feed_schedule_store.c"
+        "feed_scheduler.c"
+        "feeder_slots.c"
+        "feeder_amount.c"
+        "feed_http.c"
+        "feeder_notify.c"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        nvs_flash
+        esp_wifi
+        esp_netif
+        esp_event
+        esp_http_server
+        esp_http_client
+        esp_timer
+        json
+        driver
+)

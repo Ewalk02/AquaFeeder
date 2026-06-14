@@ -1,0 +1,55 @@
+menu "AquaFeeder"
+
+    config FEEDER_WIFI_SSID
+        string "WiFi SSID"
+        default "your-ssid"
+        help
+            WiFi network name for the feeder to join.
+
+    config FEEDER_WIFI_PASSWORD
+        string "WiFi password"
+        default ""
+        help
+            WiFi password (leave empty for open networks).
+
+    menu "Stepper motor (TMC2209)"
+
+        config STEPPER_MICROSTEPS
+            int "TMC2209 microsteps per full step (MS1/MS2 setting)"
+            default 8
+            range 1 256
+            help
+                Pulses per motor revolution = 200 x this value.
+                MS1=LOW MS2=LOW (floating) on TMC2209 = 1/8 (use 8).
+
+        config STEPPER_TEST_RPM
+            int "Shaft speed (RPM) during feeds"
+            default 10
+            range 1 120
+            help
+                Target output shaft RPM. Step rate accounts for microsteps above.
+
+        config STEPPER_STEP_PULSE_US
+            int "STEP pulse high time (microseconds)"
+            default 1000
+            range 10 50000
+            help
+                Some TMC2209 carrier boards need a longer STEP pulse than the
+                datasheet minimum. Try 1000 us if the motor clicks but does not turn.
+
+        config STEPPER_EN_ACTIVE_LOW
+            bool "Enable pin active LOW (typical TMC2209 module)"
+            default y
+            help
+                Most TMC2209 breakouts enable the driver when EN is pulled LOW.
+                Disable this if your board enables on HIGH.
+
+        config STEPPER_DIR_INVERT
+            bool "Invert motor direction (DIR pin high)"
+            default y
+            help
+                Flip feed direction. Toggle if the motor runs backwards.
+
+    endmenu
+
+endmenu

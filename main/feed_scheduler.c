@@ -17,7 +17,7 @@
 
 static const char *TAG = "scheduler";
 
-#define CHECK_INTERVAL_MS       30000
+#define CHECK_INTERVAL_MS       5000
 #define FEED_TRIGGER_WINDOW_S   45
 #define MIN_SCHEDULED_GAP_S     60
 

@@ -1,54 +1,135 @@
 #include "wifi_setup.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
+#include "esp_timer.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/event_groups.h"
 #include "sdkconfig.h"
 
 static const char *TAG = "wifi";
 
-#define WIFI_CONNECTED_BIT BIT0
-#define WIFI_FAIL_BIT      BIT1
-#define WIFI_MAX_RETRY     10
+#define RECONNECT_BACKOFF_INITIAL_MS 1000
+#define RECONNECT_BACKOFF_MAX_MS     60000
 
-static EventGroupHandle_t s_wifi_event_group;
-static int s_retry_count;
 static bool s_connected;
+static uint32_t s_reconnect_attempt;
+static uint32_t s_backoff_ms = RECONNECT_BACKOFF_INITIAL_MS;
+static esp_timer_handle_t s_reconnect_timer;
+
+static void request_wifi_connect(void)
+{
+    esp_wifi_connect();
+}
+
+static void reconnect_timer_cb(void *arg)
+{
+    (void)arg;
+
+    if (s_connected) {
+        return;
+    }
+
+    s_reconnect_attempt++;
+    ESP_LOGI(TAG, "reconnect attempt %lu", (unsigned long)s_reconnect_attempt);
+    request_wifi_connect();
+}
+
+static void schedule_reconnect(void)
+{
+    if (s_reconnect_timer == NULL) {
+        const esp_timer_create_args_t args = {
+            .callback = reconnect_timer_cb,
+            .name = "wifi_reconn",
+        };
+        if (esp_timer_create(&args, &s_reconnect_timer) != ESP_OK) {
+            request_wifi_connect();
+            return;
+        }
+    }
+
+    esp_timer_stop(s_reconnect_timer);
+    ESP_LOGW(TAG, "disconnected, retry in %lu ms", (unsigned long)s_backoff_ms);
+    esp_timer_start_once(s_reconnect_timer, (uint64_t)s_backoff_ms * 1000ULL);
+
+    if (s_backoff_ms < RECONNECT_BACKOFF_MAX_MS) {
+        s_backoff_ms *= 2;
+        if (s_backoff_ms > RECONNECT_BACKOFF_MAX_MS) {
+            s_backoff_ms = RECONNECT_BACKOFF_MAX_MS;
+        }
+    }
+}
+
+static void log_disconnect_reason(int reason)
+{
+    const char *name = "unknown";
+    switch (reason) {
+    case WIFI_REASON_NO_AP_FOUND:
+        name = "no_ap_found";
+        break;
+    case WIFI_REASON_AUTH_FAIL:
+        name = "auth_fail";
+        break;
+    case WIFI_REASON_ASSOC_FAIL:
+        name = "assoc_fail";
+        break;
+    case WIFI_REASON_HANDSHAKE_TIMEOUT:
+        name = "handshake_timeout";
+        break;
+    case WIFI_REASON_CONNECTION_FAIL:
+        name = "connection_fail";
+        break;
+    case WIFI_REASON_BEACON_TIMEOUT:
+        name = "beacon_timeout";
+        break;
+    default:
+        break;
+    }
+    ESP_LOGW(TAG, "disconnected: %s (%d)", name, reason);
+}
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
     (void)arg;
 
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        esp_wifi_connect();
-    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        s_backoff_ms = RECONNECT_BACKOFF_INITIAL_MS;
+        request_wifi_connect();
+        return;
+    }
+
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         s_connected = false;
-        if (s_retry_count < WIFI_MAX_RETRY) {
-            esp_wifi_connect();
-            s_retry_count++;
-            ESP_LOGW(TAG, "retry connect (%d/%d)", s_retry_count, WIFI_MAX_RETRY);
+
+        const wifi_event_sta_disconnected_t *disc = (const wifi_event_sta_disconnected_t *)event_data;
+        if (disc != NULL) {
+            log_disconnect_reason(disc->reason);
         } else {
-            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-            ESP_LOGE(TAG, "failed to connect after %d attempts", WIFI_MAX_RETRY);
+            ESP_LOGW(TAG, "disconnected");
         }
-    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+
+        schedule_reconnect();
+        return;
+    }
+
+    if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "got IP: " IPSTR, IP2STR(&event->ip_info.ip));
-        s_retry_count = 0;
         s_connected = true;
-        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        s_reconnect_attempt = 0;
+        s_backoff_ms = RECONNECT_BACKOFF_INITIAL_MS;
+        if (s_reconnect_timer != NULL) {
+            esp_timer_stop(s_reconnect_timer);
+        }
     }
 }
 
 esp_err_t wifi_setup_init(void)
 {
-    s_wifi_event_group = xEventGroupCreate();
-
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_create_default_wifi_sta();

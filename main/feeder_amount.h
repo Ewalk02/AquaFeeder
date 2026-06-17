@@ -15,4 +15,5 @@ float feeder_amount_tenths_to_seconds(uint16_t tenths);
 bool feeder_amount_seconds_value_to_tenths(double seconds, uint16_t *tenths_out);
 bool feeder_amount_parse_seconds_text(const char *text, uint16_t *tenths_out);
 void feeder_amount_format_seconds_text(char *buf, size_t len, uint16_t tenths);
-uint16_t feeder_amount_migrate_legacy_seconds(uint16_t legacy_value);
+/** Convert legacy whole-second storage (1–120) to tenths. Values >120 pass through unchanged. */
+uint16_t feeder_amount_seconds_to_tenths(uint16_t legacy_seconds);

@@ -65,7 +65,7 @@ static esp_err_t try_load_schedule(feed_schedule_t *out)
         return err;
     }
 
-    legacy.amount_tenths = feeder_amount_migrate_legacy_seconds(legacy.amount_tenths);
+    legacy.amount_tenths = feeder_amount_seconds_to_tenths(legacy.amount_tenths);
     *out = legacy;
     feed_schedule_store_save(out);
     ESP_LOGI(TAG, "migrated legacy schedule to tenths");

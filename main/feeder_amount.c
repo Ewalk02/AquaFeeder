@@ -64,10 +64,10 @@ void feeder_amount_format_seconds_text(char *buf, size_t len, uint16_t tenths)
     }
 }
 
-uint16_t feeder_amount_migrate_legacy_seconds(uint16_t legacy_value)
+uint16_t feeder_amount_seconds_to_tenths(uint16_t legacy_seconds)
 {
-    if (legacy_value >= 1 && legacy_value <= FEEDER_LEGACY_SECONDS_MAX) {
-        return (uint16_t)(legacy_value * 10U);
+    if (legacy_seconds >= 1 && legacy_seconds <= FEEDER_LEGACY_SECONDS_MAX) {
+        return (uint16_t)(legacy_seconds * 10U);
     }
-    return legacy_value;
+    return legacy_seconds;
 }
